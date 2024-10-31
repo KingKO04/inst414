@@ -1,0 +1,369 @@
+First step is to import the needed libraries.
+
+```{r}
+library(worldfootballR)
+library(tidyverse)
+```
+
+I then scrape all the data I need.
+
+```{r}
+big5_shooting <- fb_big5_advanced_season_stats(
+  season_end_year = 2024, 
+  stat_type = 'shooting', 
+  team_or_player = 'player'
+  )
+
+big5_passing <- fb_big5_advanced_season_stats(
+  season_end_year = 2024, 
+  stat_type = 'passing', 
+  team_or_player = 'player'
+  )
+
+big5_passing_types <- fb_big5_advanced_season_stats(
+  season_end_year = 2024, 
+  stat_type = 'passing_types', 
+  team_or_player = 'player'
+  )
+
+big5_gca <- fb_big5_advanced_season_stats(
+  season_end_year = 2024, 
+  stat_type = 'gca', 
+  team_or_player = 'player'
+  )
+
+big5_defense <- fb_big5_advanced_season_stats(
+  season_end_year = 2024, 
+  stat_type = 'defense', 
+  team_or_player = 'player'
+  )
+
+big5_possession <- fb_big5_advanced_season_stats(
+  season_end_year = 2024, 
+  stat_type = 'possession', 
+  team_or_player = 'player'
+  )
+
+big5_keepers <- fb_big5_advanced_season_stats(
+  season_end_year = 2024, 
+  stat_type = 'keepers', 
+  team_or_player = 'player'
+  )
+
+big5_keepers_adv <- fb_big5_advanced_season_stats(
+  season_end_year = 2024, 
+  stat_type = 'keepers_adv', 
+  team_or_player = 'player'
+  )
+```
+
+Let's create a player lookup. We will use Url as the IDs for this project,
+but using names to find Urls would be much simpler.
+
+```{r}
+player_squad_url <- big5_passing |>
+  select(Player, Squad, Url) |>
+  distinct(Player, Squad, Url, .keep_all = TRUE)
+```
+
+
+Before we merge the data frames, we need to take care of the players who played
+for multiple teams, as their data are separated. We'll also remove all
+non-cumulative data in this step, as it not only simplifies this step but it is
+also something we already were going to do.
+
+```{r}
+big5_defense_no_dups <- big5_defense |>
+  select(
+    -Season_End_Year, 
+    -Squad, 
+    -Comp, 
+    -Player,
+    -Nation, 
+    -Pos, 
+    -Age, 
+    -Born,
+    -Tkl_percent_Challenges,
+    -Mins_Per_90
+    ) |>
+  group_by(Url) |>
+  summarize(across(everything(), sum))
+```
+
+```{r}
+big5_gca_no_dups <- big5_gca |>
+  select(
+    -Season_End_Year, 
+    -Squad, 
+    -Comp, 
+    -Player,
+    -Nation, 
+    -Pos, 
+    -Age, 
+    -Born,
+    -Mins_Per_90,
+    -SCA90_SCA,
+    -GCA90_GCA
+    ) |>
+  group_by(Url) |>
+  summarize(across(everything(), sum))
+```
+
+```{r}
+big5_keepers_no_dups <- big5_keepers |>
+  select(
+    -Season_End_Year, 
+    -Squad, 
+    -Comp, 
+    -Player,
+    -Nation, 
+    -Pos, 
+    -Age, 
+    -Born,
+    -MP_Playing,
+    -Starts_Playing,
+    -Min_Playing,
+    -Mins_Per_90,
+    -Save_percent,
+    -W,
+    -D,
+    -L,
+    -CS_percent,
+    -Save_percent_Penalty,
+    -GA90
+    ) |>
+  group_by(Url) |>
+  summarize(across(everything(), sum))
+```
+
+```{r}
+big5_keepers_adv_no_dups <- big5_keepers_adv |>
+  mutate(
+    TotLen_Passes = AvgLen_Passes * (`Att (GK)_Passes` + Thr_Passes),
+    TotLen_Goal = AvgLen_Goal * Att_Goal,
+    TotDist_Sweeper = AvgDist_Sweeper * `#OPA_Sweeper`
+  ) |>
+  select(
+    -Season_End_Year, 
+    -Squad, 
+    -Comp, 
+    -Player,
+    -Nation, 
+    -Pos, 
+    -Age, 
+    -Born,
+    -Mins_Per_90,
+    -`_per_90_Expected`,
+    -Cmp_percent_Launched,
+    -Launch_percent_Passes,
+    -Launch_percent_Goal,
+    -Stp_percent_Crosses,
+    -PSxG_per_SoT_Expected,
+    -`PSxG+_per__minus__Expected`,
+    -`#OPA_per_90_Sweeper`,
+    -AvgLen_Passes,
+    -AvgLen_Goal,
+    -AvgDist_Sweeper
+    ) |>
+  group_by(Url) |>
+  summarize(across(everything(), sum))
+```
+
+```{r}
+big5_passing_no_dups <- big5_passing |>
+  select(
+    -Season_End_Year, 
+    -Squad, 
+    -Comp, 
+    -Player,
+    -Nation, 
+    -Pos, 
+    -Age, 
+    -Born,
+    -Mins_Per_90,
+    -Cmp_percent_Total,
+    -Cmp_percent_Short,
+    -Cmp_percent_Medium,
+    -Cmp_percent_Long
+    ) |>
+  group_by(Url) |>
+  summarize(across(everything(), sum))
+```
+
+```{r}
+big5_passing_types_no_dups <- big5_passing_types |>
+  select(
+    -Season_End_Year, 
+    -Squad, 
+    -Comp, 
+    -Player,
+    -Nation, 
+    -Pos, 
+    -Age, 
+    -Born,
+    -Mins_Per_90
+    ) |>
+  group_by(Url) |>
+  summarize(across(everything(), sum))
+```
+
+```{r}
+big5_possession_no_dups <- big5_possession |>
+  select(
+    -Season_End_Year, 
+    -Squad, 
+    -Comp, 
+    -Player,
+    -Nation, 
+    -Pos, 
+    -Age, 
+    -Born,
+    -Mins_Per_90,
+    -Succ_percent_Take,
+    -Tkld_percent_Take
+    ) |>
+  group_by(Url) |>
+  summarize(across(everything(), sum))
+```
+
+```{r}
+big5_shooting_no_dups <- big5_shooting |>
+  mutate(
+    TotDist_Standard = Dist_Standard * Sh_Standard
+  ) |>
+  select(
+    -Season_End_Year, 
+    -Squad, 
+    -Comp, 
+    -Player,
+    -Nation, 
+    -Pos, 
+    -Age, 
+    -Born,
+    -Mins_Per_90,
+    -SoT_percent_Standard,
+    -SoT_per_90_Standard,
+    -Sh_per_90_Standard,
+    -G_per_Sh_Standard,
+    -G_per_SoT_Standard,
+    -Dist_Standard,
+    -npxG_per_Sh_Expected
+    ) |>
+  group_by(Url) |>
+  summarize(across(everything(), sum))
+```
+
+
+Now, we need to merge the data frames.
+
+```{r}
+big5 <- merge(
+  big5_shooting_no_dups, merge(
+    big5_passing_no_dups, 
+    merge(
+      big5_passing_types_no_dups, 
+      merge(
+        big5_gca_no_dups, 
+        merge(
+          big5_defense_no_dups, 
+          merge(
+            big5_possession_no_dups, 
+            merge(
+              big5_keepers_no_dups, 
+              big5_keepers_adv_no_dups, 
+              by = 'Url', 
+              all = TRUE
+            ), 
+            by = 'Url', 
+            all = TRUE
+          ), 
+          by = 'Url', 
+          all = TRUE
+        ), 
+        by = 'Url', 
+        all = TRUE
+      ), 
+      by = 'Url', 
+      all = TRUE
+    ), 
+    by = 'Url', 
+    all = TRUE
+  ), 
+  by = 'Url', 
+  all = TRUE
+)
+```
+
+
+We'll replace all the NAs with 0s.
+
+```{r}
+big5[is.na(big5)] <- 0
+```
+
+
+Now that we have everything cleaned, we can normalize the data using
+L1 normalization.
+
+```{r}
+l1_normalize <- function(x) {
+  return(x / sum(abs(x)))
+}
+```
+
+```{r}
+row.names(big5) <- big5$Url
+big5$Url <- NULL
+```
+
+```{r}
+big5_normalized <- as.data.frame(t(apply(big5, 1, l1_normalize)))
+```
+
+
+Let's write a function that finds the 10 most similar players.
+
+```{r}
+similar_player_finder <- function(player, squad) {
+  url <- player_squad_url$Url[player_squad_url$Player == player & 
+                                player_squad_url$Squad == squad]
+  distances <- as.matrix(
+   dist(
+     rbind(
+       big5_normalized[rownames(big5_normalized) == url, ], big5_normalized
+       )
+     )
+   )[1, -1]
+  similar_players <- order(distances)[2:11]
+  
+  for (url in rownames(big5_normalized[similar_players, ])) {
+   print(
+     paste(
+       player_squad_url$Player[player_squad_url$Url == url], 
+       player_squad_url$Squad[player_squad_url$Url == url],
+       sep = ', '
+       )
+     )
+  }
+}
+```
+
+
+Now let's try it! Let's find the 10 most similar players to Julián Álvarez.
+
+```{r}
+team <- 'Manchester City'
+similar_player_finder('Julián Álvarez', team)
+```
+
+Now with Rodri. There are multiple players who go by Rodri, so the squad name is important.
+
+```{r}
+similar_player_finder('Rodri', team)
+```
+
+Lastly, with Kevin de Bruyne.
+
+```{r}
+similar_player_finder('Kevin De Bruyne', team)
+```
