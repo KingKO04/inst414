@@ -1,0 +1,116 @@
+---
+title: "GCA Network"
+output: html_notebook
+---
+
+Time to load up my two favorite libraries again.
+
+```{r}
+library(tidyverse)
+library(worldfootballR)
+```
+
+
+For the graph we will be making, we will also need igraph.
+
+```{r}
+library(igraph)
+```
+
+
+We will be using the 2017-18 Liverpool season to highlight the benefits of goal creation networks.
+
+```{r}
+lpool_url <- 'https://fbref.com/en/squads/822bd0ba/2017-2018/Liverpool-Stats'
+goal_log <- fb_team_goal_logs(team_urls = lpool_url, for_or_against="for")
+```
+
+
+After looking through the goal_log, it's evident to me that the Champions' League playoff stage and the FA Cup are two tournaments where goal-creating actions are not tracked. Therefore we will filter out these tournaments.
+
+```{r}
+filtered_goal_log <- goal_log |>
+  filter(!(goal_log$Round == 'Play-off round' | goal_log$Comp == 'FA Cup'))
+```
+
+
+The only columns needed will be Scorer, GCA1, and GC2.
+
+```{r}
+selected_goal_log <- filtered_goal_log |>
+  select(Scorer, GCA1, GCA2)
+```
+
+
+We should also remove scorers that were own goals, as they are not Liverpool players.
+
+```{r}
+filtered_scorers_goal_log <- selected_goal_log |>
+  mutate(Scorer = ifelse(grepl('(OG)', Scorer), "", Scorer))
+```
+
+
+Now we can build the graph.
+
+```{r}
+g <- make_empty_graph(directed = FALSE)
+for (i in 1:nrow(filtered_scorers_goal_log)) {
+  players <- filtered_scorers_goal_log[i, c("Scorer", "GCA1", "GCA2")]
+  players <- players[players != ""]
+  
+  for (player in players) {
+    if (!(player %in% V(g)$name)) {
+      g <- add_vertices(g, 1, name = player)
+    }
+  }
+  
+  if (length(players) > 1) {
+    edges <- unlist(combn(players, 2), use.names = FALSE)
+    g <- add_edges(g, edges)
+  }
+}
+```
+
+
+With this graph we can see who the three most important goal creators are by three different methods: degree,...
+
+```{r}
+degree_df <- data.frame(
+  vertex = V(g)$name,
+  degree = degree(g)
+)
+
+degree_df[order(-degree_df$degree)[1:3], ]
+```
+
+
+...eigenvector,...
+
+```{r}
+eigenvector_df <- data.frame(
+  vertex = V(g)$name,
+  eigenvector = eigen_centrality(g)$vector
+)
+
+eigenvector_df[order(-eigenvector_df$eigenvector)[1:3], ]
+```
+
+
+...and closeness.
+
+```{r}
+closeness_df <- data.frame(
+  vertex = V(g)$name,
+  closeness = closeness(g)
+)
+
+closeness_df[order(-closeness_df$closeness)[1:3], ]
+```
+
+
+We can even create a visual of the graph that confirms what all three measures of centrality have told us: Mohamed Salah, Sadio Mané, and Roberto Firmino were the most integral to Liverpool's attack in the 2017-18 season.
+
+```{r}
+plot(g, vertex.label = V(g)$name, edge.color = "gray", vertex.size = 30)
+```
+
