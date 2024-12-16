@@ -1,0 +1,606 @@
+First step is to import the needed libraries.
+
+```{r}
+library(worldfootballR)
+library(tidyverse)
+library(mclust)
+```
+
+I then scrape all the data I need.
+
+```{r}
+big5_shooting <- fb_big5_advanced_season_stats(
+  season_end_year = 2024, 
+  stat_type = 'shooting', 
+  team_or_player = 'player'
+  )
+
+big5_passing <- fb_big5_advanced_season_stats(
+  season_end_year = 2024, 
+  stat_type = 'passing', 
+  team_or_player = 'player'
+  )
+
+big5_passing_types <- fb_big5_advanced_season_stats(
+  season_end_year = 2024, 
+  stat_type = 'passing_types', 
+  team_or_player = 'player'
+  )
+
+big5_gca <- fb_big5_advanced_season_stats(
+  season_end_year = 2024, 
+  stat_type = 'gca', 
+  team_or_player = 'player'
+  )
+
+big5_defense <- fb_big5_advanced_season_stats(
+  season_end_year = 2024, 
+  stat_type = 'defense', 
+  team_or_player = 'player'
+  )
+
+big5_possession <- fb_big5_advanced_season_stats(
+  season_end_year = 2024, 
+  stat_type = 'possession', 
+  team_or_player = 'player'
+  )
+
+big5_keepers <- fb_big5_advanced_season_stats(
+  season_end_year = 2024, 
+  stat_type = 'keepers', 
+  team_or_player = 'player'
+  )
+
+big5_keepers_adv <- fb_big5_advanced_season_stats(
+  season_end_year = 2024, 
+  stat_type = 'keepers_adv', 
+  team_or_player = 'player'
+  )
+```
+
+
+Let's separate outfield players from goalies.
+```{r}
+big5_defense_gk <- big5_defense |>
+  filter(Pos == "GK")
+big5_defense_outfield <- big5_defense |>
+  filter(Pos != "GK")
+
+big5_gca_gk <- big5_gca |>
+  filter(Pos == "GK")
+big5_gca_outfield <- big5_gca |>
+  filter(Pos != "GK")
+
+big5_passing_gk <- big5_passing |>
+  filter(Pos == "GK")
+big5_passing_outfield <- big5_passing |>
+  filter(Pos != "GK")
+
+big5_passing_types_gk <- big5_passing_types |>
+  filter(Pos == "GK")
+big5_passing_types_outfield <- big5_passing_types |>
+  filter(Pos != "GK")
+
+big5_possession_gk <- big5_possession |>
+  filter(Pos == "GK")
+big5_possession_outfield <- big5_possession |>
+  filter(Pos != "GK")
+
+big5_shooting_gk <- big5_shooting |>
+  filter(Pos == "GK")
+big5_shooting_outfield <- big5_shooting |>
+  filter(Pos != "GK")
+```
+
+Before we merge the different types of stats, we need to take care of the
+players who played for multiple teams, as their data are separated. We'll also
+remove all non-cumulative data in this step, as it not only simplifies this
+step but it is also something we already were going to do.
+
+```{r}
+big5_defense_gk_no_dups <- big5_defense_gk |>
+  select(
+    -Season_End_Year, 
+    -Squad, 
+    -Comp, 
+    -Player,
+    -Nation, 
+    -Pos, 
+    -Age, 
+    -Born,
+    -Tkl_percent_Challenges,
+    -Mins_Per_90
+    ) |>
+  group_by(Url) |>
+  summarize(across(everything(), sum))
+```
+
+```{r}
+big5_defense_outfield_no_dups <- big5_defense_outfield |>
+  select(
+    -Season_End_Year, 
+    -Squad, 
+    -Comp, 
+    -Player,
+    -Nation, 
+    -Pos, 
+    -Age, 
+    -Born,
+    -Tkl_percent_Challenges,
+    -Mins_Per_90
+    ) |>
+  group_by(Url) |>
+  summarize(across(everything(), sum))
+```
+
+```{r}
+big5_gca_gk_no_dups <- big5_gca_gk |>
+  select(
+    -Season_End_Year, 
+    -Squad, 
+    -Comp, 
+    -Player,
+    -Nation, 
+    -Pos, 
+    -Age, 
+    -Born,
+    -Mins_Per_90,
+    -SCA90_SCA,
+    -GCA90_GCA
+    ) |>
+  group_by(Url) |>
+  summarize(across(everything(), sum))
+```
+
+```{r}
+big5_gca_outfield_no_dups <- big5_gca_outfield |>
+  select(
+    -Season_End_Year, 
+    -Squad, 
+    -Comp, 
+    -Player,
+    -Nation, 
+    -Pos, 
+    -Age, 
+    -Born,
+    -Mins_Per_90,
+    -SCA90_SCA,
+    -GCA90_GCA
+    ) |>
+  group_by(Url) |>
+  summarize(across(everything(), sum))
+```
+
+```{r}
+big5_keepers_no_dups <- big5_keepers |>
+  select(
+    -Season_End_Year, 
+    -Squad, 
+    -Comp, 
+    -Player,
+    -Nation, 
+    -Pos, 
+    -Age, 
+    -Born,
+    -MP_Playing,
+    -Starts_Playing,
+    -Min_Playing,
+    -Mins_Per_90,
+    -Save_percent,
+    -W,
+    -D,
+    -L,
+    -CS_percent,
+    -Save_percent_Penalty,
+    -GA90
+    ) |>
+  group_by(Url) |>
+  summarize(across(everything(), sum))
+```
+
+```{r}
+big5_keepers_adv_no_dups <- big5_keepers_adv |>
+  mutate(
+    TotLen_Passes = AvgLen_Passes * (`Att (GK)_Passes` + Thr_Passes),
+    TotLen_Goal = AvgLen_Goal * Att_Goal,
+    TotDist_Sweeper = AvgDist_Sweeper * `#OPA_Sweeper`
+  ) |>
+  select(
+    -Season_End_Year, 
+    -Squad, 
+    -Comp, 
+    -Player,
+    -Nation, 
+    -Pos, 
+    -Age, 
+    -Born,
+    -Mins_Per_90,
+    -`_per_90_Expected`,
+    -Cmp_percent_Launched,
+    -Launch_percent_Passes,
+    -Launch_percent_Goal,
+    -Stp_percent_Crosses,
+    -PSxG_per_SoT_Expected,
+    -`PSxG+_per__minus__Expected`,
+    -`#OPA_per_90_Sweeper`,
+    -AvgLen_Passes,
+    -AvgLen_Goal,
+    -AvgDist_Sweeper
+    ) |>
+  group_by(Url) |>
+  summarize(across(everything(), sum))
+```
+
+```{r}
+big5_passing_gk_no_dups <- big5_passing_gk |>
+  select(
+    -Season_End_Year, 
+    -Squad, 
+    -Comp, 
+    -Player,
+    -Nation, 
+    -Pos, 
+    -Age, 
+    -Born,
+    -Mins_Per_90,
+    -Cmp_percent_Total,
+    -Cmp_percent_Short,
+    -Cmp_percent_Medium,
+    -Cmp_percent_Long
+    ) |>
+  group_by(Url) |>
+  summarize(across(everything(), sum))
+```
+
+```{r}
+big5_passing_outfield_no_dups <- big5_passing_outfield |>
+  select(
+    -Season_End_Year, 
+    -Squad, 
+    -Comp, 
+    -Player,
+    -Nation, 
+    -Pos, 
+    -Age, 
+    -Born,
+    -Mins_Per_90,
+    -Cmp_percent_Total,
+    -Cmp_percent_Short,
+    -Cmp_percent_Medium,
+    -Cmp_percent_Long
+    ) |>
+  group_by(Url) |>
+  summarize(across(everything(), sum))
+```
+
+```{r}
+big5_passing_types_gk_no_dups <- big5_passing_types_gk |>
+  select(
+    -Season_End_Year, 
+    -Squad, 
+    -Comp, 
+    -Player,
+    -Nation, 
+    -Pos, 
+    -Age, 
+    -Born,
+    -Mins_Per_90
+    ) |>
+  group_by(Url) |>
+  summarize(across(everything(), sum))
+```
+
+```{r}
+big5_passing_types_outfield_no_dups <- big5_passing_types_outfield |>
+  select(
+    -Season_End_Year, 
+    -Squad, 
+    -Comp, 
+    -Player,
+    -Nation, 
+    -Pos, 
+    -Age, 
+    -Born,
+    -Mins_Per_90
+    ) |>
+  group_by(Url) |>
+  summarize(across(everything(), sum))
+```
+
+```{r}
+big5_possession_gk_no_dups <- big5_possession_gk |>
+  select(
+    -Season_End_Year, 
+    -Squad, 
+    -Comp, 
+    -Player,
+    -Nation, 
+    -Pos, 
+    -Age, 
+    -Born,
+    -Mins_Per_90,
+    -Succ_percent_Take,
+    -Tkld_percent_Take
+    ) |>
+  group_by(Url) |>
+  summarize(across(everything(), sum))
+```
+
+```{r}
+big5_possession_outfield_no_dups <- big5_possession_outfield |>
+  select(
+    -Season_End_Year, 
+    -Squad, 
+    -Comp, 
+    -Player,
+    -Nation, 
+    -Pos, 
+    -Age, 
+    -Born,
+    -Mins_Per_90,
+    -Succ_percent_Take,
+    -Tkld_percent_Take
+    ) |>
+  group_by(Url) |>
+  summarize(across(everything(), sum))
+```
+
+```{r}
+big5_shooting_gk_no_dups <- big5_shooting_gk |>
+  mutate(
+    TotDist_Standard = Dist_Standard * Sh_Standard
+  ) |>
+  select(
+    -Season_End_Year, 
+    -Squad, 
+    -Comp, 
+    -Player,
+    -Nation, 
+    -Pos, 
+    -Age, 
+    -Born,
+    -Mins_Per_90,
+    -SoT_percent_Standard,
+    -SoT_per_90_Standard,
+    -Sh_per_90_Standard,
+    -G_per_Sh_Standard,
+    -G_per_SoT_Standard,
+    -Dist_Standard,
+    -npxG_per_Sh_Expected
+    ) |>
+  group_by(Url) |>
+  summarize(across(everything(), sum))
+```
+
+```{r}
+big5_shooting_outfield_no_dups <- big5_shooting_outfield |>
+  mutate(
+    TotDist_Standard = Dist_Standard * Sh_Standard
+  ) |>
+  select(
+    -Season_End_Year, 
+    -Squad, 
+    -Comp, 
+    -Player,
+    -Nation, 
+    -Pos, 
+    -Age, 
+    -Born,
+    -Mins_Per_90,
+    -SoT_percent_Standard,
+    -SoT_per_90_Standard,
+    -Sh_per_90_Standard,
+    -G_per_Sh_Standard,
+    -G_per_SoT_Standard,
+    -Dist_Standard,
+    -npxG_per_Sh_Expected
+    ) |>
+  group_by(Url) |>
+  summarize(across(everything(), sum))
+```
+
+
+Now, we need to merge the data frames.
+
+```{r}
+big5_gk <- merge(
+  big5_shooting_gk_no_dups, merge(
+    big5_passing_gk_no_dups, 
+    merge(
+      big5_passing_types_gk_no_dups, 
+      merge(
+        big5_gca_gk_no_dups, 
+        merge(
+          big5_defense_gk_no_dups, 
+          merge(
+            big5_possession_gk_no_dups, 
+            merge(
+              big5_keepers_no_dups, 
+              big5_keepers_adv_no_dups, 
+              by = 'Url', 
+              all = TRUE
+            ), 
+            by = 'Url', 
+            all = TRUE
+          ), 
+          by = 'Url', 
+          all = TRUE
+        ), 
+        by = 'Url', 
+        all = TRUE
+      ), 
+      by = 'Url', 
+      all = TRUE
+    ), 
+    by = 'Url', 
+    all = TRUE
+  ), 
+  by = 'Url', 
+  all = TRUE
+)
+```
+
+```{r}
+big5_outfield <- merge(
+  big5_shooting_outfield_no_dups, merge(
+    big5_passing_outfield_no_dups, 
+    merge(
+      big5_passing_types_outfield_no_dups, 
+      merge(
+        big5_gca_outfield_no_dups, 
+        merge(
+          big5_defense_outfield_no_dups, 
+          big5_possession_outfield_no_dups,
+          by = 'Url', 
+          all = TRUE
+          ),
+        by = 'Url', 
+        all = TRUE
+        ), 
+      by = 'Url', 
+      all = TRUE
+    ), 
+    by = 'Url', 
+    all = TRUE
+  ), 
+  by = 'Url', 
+  all = TRUE
+)
+```
+
+
+We'll replace all the NAs with 0s.
+
+```{r}
+big5_gk[is.na(big5_gk)] <- 0
+big5_outfield[is.na(big5_outfield)] <- 0
+```
+
+
+Now that we have everything cleaned, we can normalize the data using
+L1 normalization.
+
+```{r}
+l1_normalize <- function(x) {
+  return(x / sum(abs(x)))
+}
+```
+
+```{r}
+row.names(big5_gk) <- big5_gk$Url
+big5_gk$Url <- NULL
+
+row.names(big5_outfield) <- big5_outfield$Url
+big5_outfield$Url <- NULL
+```
+
+```{r}
+big5_gk_normalized <- as.data.frame(t(apply(big5_gk, 1, l1_normalize)))
+big5_outfield_normalized <- as.data.frame(t(apply(
+  big5_outfield, 
+  1, 
+  l1_normalize
+  )))
+```
+
+
+We will do another NA check, as it is possible for players to have only played
+a minimal amount of time in a season, not charting any statistics. We do not
+want that player in the data set, so we will remove them.
+```{r}
+big5_gk_normalized <- na.omit(big5_gk_normalized)
+big5_outfield_normalized <- na.omit(big5_outfield_normalized)
+```
+
+
+We have a lot of dimensions. Too many. Let's reduce them using PCA.
+
+For this to work, we need to remove any columns where no goalies recorded any
+statistics at all.
+
+```{r}
+big5_gk_partial_pca <- big5_gk_normalized[, apply(
+  big5_gk_normalized, 
+  2, 
+  var
+  ) > 0]
+```
+
+```{r}
+gk_pca_result <- prcomp(big5_gk_partial_pca, center = TRUE, scale. = TRUE)
+big5_gk_pca <- predict(gk_pca_result, newdata = big5_gk_partial_pca)
+
+outfield_pca_result <- prcomp(
+  big5_outfield_normalized, 
+  center = TRUE, 
+  scale. = TRUE)
+big5_outfield_pca <- predict(outfield_pca_result, 
+                             newdata = big5_outfield_normalized)
+
+summary(gk_pca_result)
+summary(outfield_pca_result)
+```
+
+
+By viewing the summaries of the PCA results for the GK and Outfield data, we
+can see that not all columns are of value when clustering. To help reduce
+dimensionality, we should pick the least number of columns that gives us a
+cumulative proportion of at least 0.95. For the GK data, that's up to PC43; for
+the outfielders, that's up to PC49.
+```{r}
+big5_gk_pca_final <- big5_gk_pca[,1:43]
+big5_outfield_pca_final <- big5_outfield_pca[,1:49]
+```
+
+
+Now, we can run the Gaussian Mixtures models.
+```{r}
+gk_gmm_model <- Mclust(big5_gk_pca_final)
+big5_gk_clusters <- big5_gk |>
+  mutate(Clusters = gk_gmm_model$classification)
+```
+
+```{r}
+outfield_gmm_model <- Mclust(big5_outfield_pca_final)
+big5_outfield_clusters <- big5_outfield |>
+  rownames_to_column("temp") |>
+  filter(temp %in% rownames(big5_outfield_normalized)) |>
+  column_to_rownames("temp") |>
+  mutate(Clusters = outfield_gmm_model$classification)
+```
+
+
+We got eight clusters from the outfield players and 3 from the goalkeepers. Good start, but I think we can get more out of each outfield cluster. Let's see if we can get more.
+```{r}
+cluster_models <- list()
+cluster_results <- list()
+
+unique_clusters <- unique(big5_outfield_clusters$Clusters)
+
+for (cluster in unique_clusters) {
+  # Subset the data for the current cluster
+  cluster_data <- big5_outfield_clusters |>
+    filter(Clusters == cluster) |>
+    select(-Clusters)
+  
+  # Run GMM on the current cluster
+  gmm_model <- Mclust(cluster_data)
+  
+  # Save the model to the list
+  cluster_models[[as.character(cluster)]] <- gmm_model
+  
+  # Add the classification to the data
+  cluster_result <- cluster_data |>
+    mutate(Cluster = gmm_model$classification)
+  
+  # Save the results to the list
+  cluster_results[[as.character(cluster)]] <- cluster_result
+}
+```
+
+
+This generated 61 clusters in total, plus three more for goalkeepers! This is great, especially considering several (around 10) of the clusters are very small. I think having around 50 is good. Let's merge the outfielders back together, as they are currently separated by big cluster.
+```{r}
+big5_final <- bind_rows(cluster_results, .id = "ParentCluster")
+big5_final
+```
